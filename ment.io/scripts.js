@@ -7,20 +7,22 @@ angular.module('mentio-demo', ['mentio', 'ngRoute'])
             .when('/', {
                 templateUrl: 'examples.html',
                 tab: 'examples',
-                title: 'Ment.io examples',
-                controller: 'mentio-demo-ctrl'
+                title: 'Ment.io examples'
             })
             .when('/documentation', {
                 templateUrl: 'documentation.html',
                 tab: 'documentation',
-                title: 'Ment.io Documentation',
-                controller: 'mentio-demo-ctrl'
+                title: 'Ment.io Documentation'
             })
             .when('/examples', {
                 templateUrl: 'examples.html',
                 tab: 'examples',
-                title: 'Ment.io examples',
-                controller: 'mentio-demo-ctrl'
+                title: 'Ment.io examples'
+            })
+            .when('/inside-scrollable-element', {
+                templateUrl: 'inside-scrollable-element.html',
+                tab: 'inside-scrollable-element',
+                title: 'Ment.io inside scrollable element'
             });
     })
 
@@ -33,7 +35,7 @@ angular.module('mentio-demo', ['mentio', 'ngRoute'])
         });
     })
 
-    .controller('mentio-demo-ctrl', function ($scope, $http) {
+    .controller('mentio-demo-ctrl', function ($scope, $rootScope, $http, $q, $sce, $timeout, mentioUtil) {
 
         $scope.macros = {
             'brb': 'Be right back',
@@ -42,48 +44,88 @@ angular.module('mentio-demo', ['mentio', 'ngRoute'])
                 ' height="20" width="20">'
         };
 
+        // shows the use of dynamic values in mentio-id and mentio-for to link elements
+        $scope.myIndexValue = '5';
+
         $scope.searchProducts = function(term) {
             var prodList = [];
 
-            $http.get('productdata.json').success(function (response) {
-                angular.forEach(response, function(item) {
-                    if (item._source.title.toUpperCase().indexOf(term.toUpperCase()) >= 0) {
+            return $http.get('productdata.json').then(function (response) {
+                angular.forEach(response.data, function(item) {
+                    if (item.title.toUpperCase().indexOf(term.toUpperCase()) >= 0) {
                         prodList.push(item);
                     }
                 });
 
                 $scope.products = prodList;
+                return $q.when(prodList);
             });
         };
 
         $scope.searchPeople = function(term) {
             var peopleList = [];
-            $http.get('peopledata.json').success(function (response) {
-                angular.forEach(response, function(item) {
-                    if (item._source.name.toUpperCase().indexOf(term.toUpperCase()) >= 0) {
+            return $http.get('peopledata.json').then(function (response) {
+                angular.forEach(response.data, function(item) {
+                    if (item.name.toUpperCase().indexOf(term.toUpperCase()) >= 0) {
                         peopleList.push(item);
                     }
                 });
                 $scope.people = peopleList;
+                return $q.when(peopleList);
+            });
+        };
+
+        $scope.searchSimplePeople = function(term) {
+            return $http.get('simplepeopledata.json').then(function (response) {
+                $scope.simplePeople = [];
+                angular.forEach(response.data, function(item) {
+                    if (item.label.toUpperCase().indexOf(term.toUpperCase()) >= 0) {
+                        $scope.simplePeople.push(item);
+                    }
+                });
             });
         };
 
         $scope.getProductText = function(item) {
-            return '[~<strong>' + item._sku + '</strong>]';
+            return '[~<strong>' + item.sku + '</strong>]';
         };
 
         $scope.getProductTextRaw = function(item) {
-            return '#' + item._sku;
+            return '#' + item.sku;
         };
 
         $scope.getPeopleText = function(item) {
-            return '[~<i>' + item._source.name + '</i>]';
+            return '[~<i>' + item.name + '</i>]';
         };
 
         $scope.getPeopleTextRaw = function(item) {
-            return '@' + item._source.name;
+            return '@' + item.name;
         };
-        $scope.theTextArea = 'Type an @ or # and some text';
+
+        $scope.resetDemo = function() {
+            // finally enter content that will raise a menu after everything is set up
+            $timeout(function() {
+                var html = 'Try me @ or add a macro like brb, omw, (smile)';
+                var htmlContent = document.querySelector('#htmlContent');
+                if (htmlContent) {
+                    var ngHtmlContent = angular.element(htmlContent);
+                    ngHtmlContent.html(html);
+                    ngHtmlContent.scope().htmlContent = html;
+                    // select right after the @
+                    mentioUtil.selectElement(htmlContent, [0], 8);
+                    ngHtmlContent.scope().$apply();
+                }
+            }, 0);
+        };
+
+        $rootScope.$on('$routeChangeSuccess', function () {
+            $scope.resetDemo();
+        });
+ 
+        $scope.theTextArea = 'Type an # and some text';
+        $scope.theTextArea2 = 'Type an @';
+        $scope.searchSimplePeople('');
+        $scope.resetDemo();
     })
 
     .directive('contenteditable', ['$sce', function($sce) {
@@ -105,7 +147,9 @@ angular.module('mentio-demo', ['mentio', 'ngRoute'])
 
                 // Specify how UI should be updated
                 ngModel.$render = function() {
-                    element.html($sce.getTrustedHtml(ngModel.$viewValue || ''));
+                    if (ngModel.$viewValue !== element.html()) {
+                        element.html($sce.getTrustedHtml(ngModel.$viewValue || ''));
+                    }
                 };
 
                 // Listen for change events to enable binding
@@ -113,16 +157,9 @@ angular.module('mentio-demo', ['mentio', 'ngRoute'])
                     scope.$apply(read);
                 });
                 read(); // initialize
-
-                // Write data to the model
             }
         };
     }])
-    .filter('unsafe', function($sce) {
-        return function (val) {
-            return $sce.trustAsHtml(val);
-        };
-    })
     .filter('words', function () {
         return function (input, words) {
             if (isNaN(words)) {
